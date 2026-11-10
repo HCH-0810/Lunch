@@ -80,6 +80,16 @@
             background: #dbe4ee;
         }
 
+        .btn-danger {
+            background: #fdf2f2;
+            border-color: #f8b4b4;
+            color: #c53030;
+        }
+
+        .btn-danger:active {
+            background: #fbd5d5;
+        }
+
         .stats-bar {
             display: flex;
             flex-wrap: wrap;
@@ -257,8 +267,9 @@
     <div class="tip-text">💡 點擊狀態切換 | **長按**格子鎖定/解鎖 | 下方可直接輸入備註</div>
     
     <div class="controls">
-        <button class="btn" onclick="openSettings()">⚙️ 佈局與名稱設定</button>
-        <button class="btn" onclick="resetAllStates()">🔄 重置全部狀態</button>
+        <button class="btn" onclick="openSettings()">⚙️ 佈局設定</button>
+        <button class="btn" onclick="resetUnlocakdStates()">🔄 重置未鎖定</button>
+        <button class="btn btn-danger" onclick="resetAllStates()">🧹 一鍵全清</button>
     </div>
 
     <div class="stats-bar" id="statsBar"></div>
@@ -409,7 +420,7 @@
     let pressTimer = null;
 
     container.addEventListener('touchstart', (e) => {
-        if (e.target.classList.contains('seat-note')) return; // 在輸入框內不觸發長按
+        if (e.target.classList.contains('seat-note')) return;
         const card = e.target.closest('.seat-card');
         if (!card) return;
         const idx = parseInt(card.getAttribute('data-index'));
@@ -439,14 +450,25 @@
     container.addEventListener('mouseup', () => clearTimeout(pressTimer));
     container.addEventListener('mouseleave', () => clearTimeout(pressTimer));
 
-    // 8. 重置所有狀態
-    function resetAllStates() {
-        if (confirm("確定要將所有未鎖定的座位狀態重置為「空」嗎？（備註會保留）")) {
+    // 8-1. 重置未鎖定狀態 (保留鎖定與備註)
+    function resetUnlocakdStates() {
+        if (confirm("確定要將「未鎖定」的座位狀態重置為「空」嗎？（已鎖定的狀態與備註會保留）")) {
             for (let i = 0; i < seatStates.length; i++) {
                 if (!seatLocks[i]) {
                     seatStates[i] = 0;
                 }
             }
+            renderGrid();
+        }
+    }
+
+    // 8-2. 🧹 一鍵全清 (強制清除所有狀態、鎖定與備註)
+    function resetAllStates() {
+        if (confirm("⚠️ 確定要【一鍵全清】嗎？這將會清除所有狀態、解除所有鎖定並清空所有備註！")) {
+            const total = config.rows * config.cols;
+            seatStates = Array(total).fill(0);
+            seatLocks = Array(total).fill(false);
+            seatNotes = Array(total).fill('');
             renderGrid();
         }
     }
