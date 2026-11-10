@@ -46,6 +46,12 @@
         .title {
             font-size: 1.2rem;
             font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .tip-text {
+            font-size: 0.75rem;
+            color: #666;
             margin-bottom: 8px;
         }
 
@@ -102,36 +108,83 @@
 
         .seat-card {
             border-radius: 8px;
-            padding: 8px 4px;
+            padding: 8px 6px;
             text-align: center;
-            cursor: pointer;
             border: 2px solid;
             transition: transform 0.1s ease, box-shadow 0.1s ease;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            justify-content: space-between;
             align-items: center;
-            min-height: 65px;
+            min-height: 95px;
+            position: relative;
         }
 
-        .seat-card:active {
-            transform: scale(0.93);
+        /* 鎖定狀態樣式 */
+        .seat-card.locked {
+            background-image: repeating-linear-gradient(45deg, transparent, transparent 6px, rgba(0,0,0,0.04) 6px, rgba(0,0,0,0.04) 12px);
+        }
+
+        .lock-icon {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            font-size: 0.6rem;
+            background: rgba(0,0,0,0.15);
+            color: #fff;
+            padding: 1px 3px;
+            border-radius: 3px;
         }
 
         .seat-name {
             font-size: 0.7rem;
             opacity: 0.75;
-            margin-bottom: 2px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 90%;
         }
 
+        /* 點擊切換狀態的主體區塊 */
+        .seat-main {
+            cursor: pointer;
+            width: 100%;
+            padding: 2px 0;
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .seat-main:active {
+            transform: scale(0.95);
+        }
+
         .seat-val {
-            font-size: 1.3rem;
+            font-size: 1.2rem;
             font-weight: 900;
-            line-height: 1;
+            line-height: 1.1;
+        }
+
+        /* 備註輸入框 */
+        .seat-note {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 4px;
+            font-size: 0.7rem;
+            padding: 2px 4px;
+            text-align: center;
+            color: #333;
+            outline: none;
+            margin-top: 4px;
+        }
+
+        .seat-note:focus {
+            background: #ffffff;
+            border-color: var(--primary);
+            box-shadow: 0 0 3px rgba(74, 144, 226, 0.5);
         }
 
         /* 設定面板 Modal */
@@ -201,6 +254,7 @@
 
 <div class="header">
     <div class="title" id="appTitle">座位狀態控制表</div>
+    <div class="tip-text">💡 點擊狀態切換 | **長按**格子鎖定/解鎖 | 下方可直接輸入備註</div>
     
     <div class="controls">
         <button class="btn" onclick="openSettings()">⚙️ 佈局與名稱設定</button>
@@ -262,6 +316,8 @@
     };
 
     let seatStates = JSON.parse(localStorage.getItem('custom_grid_states')) || Array(20).fill(0);
+    let seatLocks = JSON.parse(localStorage.getItem('custom_grid_locks')) || Array(20).fill(false);
+    let seatNotes = JSON.parse(localStorage.getItem('custom_grid_notes')) || Array(20).fill('');
 
     const container = document.getElementById('gridContainer');
     const statsBar = document.getElementById('statsBar');
@@ -271,9 +327,9 @@
         const total = config.rows * config.cols;
         
         // 確保陣列長度正確
-        if (seatStates.length !== total) {
-            seatStates = Array(total).fill(0);
-        }
+        if (seatStates.length !== total) seatStates = Array(total).fill(0);
+        if (seatLocks.length !== total) seatLocks = Array(total).fill(false);
+        if (seatNotes.length !== total) seatNotes = Array(total).fill('');
 
         // 設定動態 Grid
         container.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
@@ -285,11 +341,17 @@
             const word = WORDS[stateIdx];
             const color = COLOR_MAP[word] || COLOR_MAP["空"];
             const name = config.names[i] || `座位 ${i + 1}`;
+            const isLocked = seatLocks[i];
+            const note = seatNotes[i] || '';
 
             html += `
-                <div class="seat-card" data-index="${i}" style="background-color: ${color.bg}; border-color: ${color.border}; color: ${color.text};">
+                <div class="seat-card ${isLocked ? 'locked' : ''}" data-index="${i}" style="background-color: ${color.bg}; border-color: ${color.border}; color: ${color.text};">
+                    ${isLocked ? '<span class="lock-icon">🔒 鎖定</span>' : ''}
                     <div class="seat-name">${name}</div>
-                    <div class="seat-val">${word}</div>
+                    <div class="seat-main" data-action="toggle">
+                        <div class="seat-val">${word}</div>
+                    </div>
+                    <input type="text" class="seat-note" data-index="${i}" value="${note}" placeholder="備註..." />
                 </div>
             `;
         }
@@ -299,8 +361,15 @@
         updateStats();
 
         // 儲存至本地
+        saveData();
+    }
+
+    // 儲存至 LocalStorage
+    function saveData() {
         localStorage.setItem('custom_grid_config', JSON.stringify(config));
         localStorage.setItem('custom_grid_states', JSON.stringify(seatStates));
+        localStorage.setItem('custom_grid_locks', JSON.stringify(seatLocks));
+        localStorage.setItem('custom_grid_notes', JSON.stringify(seatNotes));
     }
 
     // 4. 更新統計
@@ -315,25 +384,74 @@
         }).join('');
     }
 
-    // 5. 事件委派：點擊切換狀態
+    // 5. 點擊狀態切換
     container.addEventListener('click', (e) => {
-        const card = e.target.closest('.seat-card');
-        if (!card) return;
+        const mainEl = e.target.closest('[data-action="toggle"]');
+        if (!mainEl) return;
 
+        const card = mainEl.closest('.seat-card');
         const idx = parseInt(card.getAttribute('data-index'));
+        if (seatLocks[idx]) return; // 鎖定狀態下不可切換
+
         seatStates[idx] = (seatStates[idx] + 1) % WORDS.length;
         renderGrid();
     });
 
-    // 6. 重置所有狀態
+    // 6. 監聽備註輸入並即時同步儲存
+    container.addEventListener('input', (e) => {
+        if (!e.target.classList.contains('seat-note')) return;
+        const idx = parseInt(e.target.getAttribute('data-index'));
+        seatNotes[idx] = e.target.value;
+        localStorage.setItem('custom_grid_notes', JSON.stringify(seatNotes));
+    });
+
+    // 7. 長按解鎖/鎖定事件處理
+    let pressTimer = null;
+
+    container.addEventListener('touchstart', (e) => {
+        if (e.target.classList.contains('seat-note')) return; // 在輸入框內不觸發長按
+        const card = e.target.closest('.seat-card');
+        if (!card) return;
+        const idx = parseInt(card.getAttribute('data-index'));
+        
+        pressTimer = setTimeout(() => {
+            seatLocks[idx] = !seatLocks[idx];
+            navigator.vibrate && navigator.vibrate(50);
+            renderGrid();
+        }, 600);
+    });
+
+    container.addEventListener('touchend', () => clearTimeout(pressTimer));
+    container.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+    container.addEventListener('mousedown', (e) => {
+        if (e.target.classList.contains('seat-note')) return;
+        const card = e.target.closest('.seat-card');
+        if (!card) return;
+        const idx = parseInt(card.getAttribute('data-index'));
+        
+        pressTimer = setTimeout(() => {
+            seatLocks[idx] = !seatLocks[idx];
+            renderGrid();
+        }, 600);
+    });
+
+    container.addEventListener('mouseup', () => clearTimeout(pressTimer));
+    container.addEventListener('mouseleave', () => clearTimeout(pressTimer));
+
+    // 8. 重置所有狀態
     function resetAllStates() {
-        if (confirm("確定要將所有座位重置為「空」嗎？")) {
-            seatStates = Array(config.rows * config.cols).fill(0);
+        if (confirm("確定要將所有未鎖定的座位狀態重置為「空」嗎？（備註會保留）")) {
+            for (let i = 0; i < seatStates.length; i++) {
+                if (!seatLocks[i]) {
+                    seatStates[i] = 0;
+                }
+            }
             renderGrid();
         }
     }
 
-    // 7. Modal 設定視窗邏輯
+    // 9. Modal 設定視窗邏輯
     function openSettings() {
         document.getElementById('inputRows').value = config.rows;
         document.getElementById('inputCols').value = config.cols;
@@ -350,11 +468,9 @@
         const c = parseInt(document.getElementById('inputCols').value) || 1;
         const rawNames = document.getElementById('inputNames').value;
 
-        // 拆分名稱
         let nameArray = rawNames.split(/[,\n]/).map(s => s.trim()).filter(s => s.length > 0);
-        
         const total = r * c;
-        // 若輸入的名稱數量不足，自動補齊預設編號
+        
         while (nameArray.length < total) {
             nameArray.push(`座位 ${String(nameArray.length + 1).padStart(2, '0')}`);
         }
@@ -362,7 +478,9 @@
         config.rows = r;
         config.cols = c;
         config.names = nameArray.slice(0, total);
-        seatStates = Array(total).fill(0); // 重新規劃尺寸時重置狀態
+        seatStates = Array(total).fill(0);
+        seatLocks = Array(total).fill(false);
+        seatNotes = Array(total).fill('');
 
         closeSettings();
         renderGrid();
